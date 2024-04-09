@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log/slog"
 	"os"
@@ -12,48 +13,56 @@ import (
 
 var selectedCluster string
 const (
+	proxyFlag = "proxy"
+	proxyFlagUsage = "please provide a teleport proxy value"
+	clusterFlag = "cluster"
+	clusterFlagUsage = "please provide a teleport cluster value"
+
 	tshCommand = "tsh"
 	loginCommand = "login"
 	kubeCommand = "kube"
 	listCommand = "list"
 	abbreviatedListCommand = "ls"
 
-	proxyFlag = "--proxy"
+	proxyArg = "--proxy"
 	argSeparator = "="
 
 	clusterSelectPrompt = "Please choose your k8s cluster"
 
+	invalidFlagsError = "provided flags are invalid, command format should be: kin <proxy> <cluster>"
 	loginError = "failed to run the teleport login command"
 	kubeListError = "failed to run the teleport kube list command"
 	kubeLoginError = "failed to run the teleport kube login command"
 	cliFormError = "failed to run the command line form"
-	invalidClusterError = "invalid cluster selection"
+	invalidClusterError = "selected cluster is invalid"
 
 	clusterEntryDelimiter = " "
 	emptyString = ""
 )
 
 func main() {
-	kubernetesClusters := []string{}
+	var proxy string
+	var cluster string
+	flag.StringVar(&proxy, proxyFlag, emptyString, proxyFlagUsage)
+	flag.StringVar(&cluster, clusterFlag, emptyString, clusterFlagUsage)
+	flag.Parse()
 
-	// Input by CLI tool
-	cluster := "snyk.teleport.sh"
-	proxy :=  "snyk.teleport.sh:443"
+	if proxy == emptyString || cluster == emptyString {
+		throwFatal(invalidFlagsError)
+	}
 
-	// Login to the teleport proxy
 	tshLoginCmd := exec.Command(
 		tshCommand,
 		loginCommand,
-		strings.Join([]string{proxyFlag, proxy}, argSeparator),
+		strings.Join([]string{proxyArg, proxy}, argSeparator),
 		cluster,
 	)
 
 	loginOutput, err := tshLoginCmd.Output()
 	if err != nil {
-		slog.Error(loginError)
-		os.Exit(1)
+		throwFatal(loginError)
 	}
-	fmt.Printf("%v\n", string(loginOutput))
+	printCommandOutput(loginOutput)
 
 	kubeListCmd := exec.Command(
 		tshCommand,
@@ -62,16 +71,16 @@ func main() {
 	)
 	listOutput, err := kubeListCmd.Output()
 	if err != nil {
-		slog.Error(kubeListError)
-		os.Exit(1)
+		throwFatal(kubeListError)
 	}
 
 	lines := strings.Split(string(listOutput), "\n")
 
-	// Remove headers
+	// Remove text headers
 	entries := lines[2:]
 	
 	// Extract available clusters
+	kubernetesClusters := []string{}
 	for _, entry := range entries {
 		clusterName := strings.Split(entry, clusterEntryDelimiter)[0]
 		if len(clusterName) > 0 {
@@ -96,12 +105,11 @@ func main() {
 
 	err = form.Run()
 	if err != nil {
-		slog.Error(cliFormError)
-		os.Exit(1)
+		throwFatal(cliFormError)
 	}
 
 	if len(selectedCluster) == 0 {
-		slog.Warn(invalidClusterError)
+		throwFatal(invalidClusterError)
 	}
 
 	kubeLoginCmd := exec.Command(
@@ -112,10 +120,18 @@ func main() {
 	)
 	kubeLoginOut, err := kubeLoginCmd.Output()
 	if err != nil {
-		slog.Error(kubeLoginError)
-		os.Exit(1)
+		throwFatal(kubeLoginError)
 	}
 
-	fmt.Printf("%v\n", string(kubeLoginOut))
+	printCommandOutput(kubeLoginOut)
 	os.Exit(0)
+}
+
+func throwFatal(errorMessage string){
+	slog.Error(errorMessage)
+	os.Exit(1)
+}
+
+func printCommandOutput(output []byte){
+	fmt.Printf("%v\n", string(output))
 }
