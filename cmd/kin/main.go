@@ -11,29 +11,58 @@ import (
 )
 
 var selectedCluster string
+const (
+	tshCommand = "tsh"
+	loginCommand = "login"
+	kubeCommand = "kube"
+	listCommand = "list"
+	abbreviatedListCommand = "ls"
+
+	proxyFlag = "--proxy"
+	argSeparator = "="
+
+	clusterSelectPrompt = "Please choose your k8s cluster"
+
+	loginError = "failed to run the teleport login command"
+	kubeListError = "failed to run the teleport kube list command"
+	kubeLoginError = "failed to run the teleport kube login command"
+	cliFormError = "failed to run the command line form"
+	invalidClusterError = "invalid cluster selection"
+
+	clusterEntryDelimiter = " "
+	emptyString = ""
+)
 
 func main() {
 	kubernetesClusters := []string{}
 
+	// Input by CLI tool
+	cluster := "snyk.teleport.sh"
+	proxy :=  "snyk.teleport.sh:443"
+
 	// Login to the teleport proxy
-	tshLogin := exec.Command(
-		"tsh",
-		"login",
-		"--proxy=snyk.teleport.sh:443",
-		"snyk.teleport.sh",
+	tshLoginCmd := exec.Command(
+		tshCommand,
+		loginCommand,
+		strings.Join([]string{proxyFlag, proxy}, argSeparator),
+		cluster,
 	)
-	loginOutput, err := tshLogin.Output()
+
+	loginOutput, err := tshLoginCmd.Output()
 	if err != nil {
-		slog.Error("Failed to run the Teleport login command")
+		slog.Error(loginError)
 		os.Exit(1)
 	}
 	fmt.Printf("%v\n", string(loginOutput))
 
-	// List kubernetes clusters
-	tshCmd := exec.Command("tsh", "kube", "ls")
-	listOutput, err := tshCmd.Output()
+	kubeListCmd := exec.Command(
+		tshCommand,
+		kubeCommand,
+		abbreviatedListCommand,
+	)
+	listOutput, err := kubeListCmd.Output()
 	if err != nil {
-		slog.Error("Failed to run the Teleport list command")
+		slog.Error(kubeListError)
 		os.Exit(1)
 	}
 
@@ -44,8 +73,8 @@ func main() {
 	
 	// Extract available clusters
 	for _, entry := range entries {
-		clusterName := strings.Split(entry, " ")[0]
-		if clusterName != "" {
+		clusterName := strings.Split(entry, clusterEntryDelimiter)[0]
+		if len(clusterName) > 0 {
 			kubernetesClusters = append(kubernetesClusters, clusterName)
 		}
 	}
@@ -58,33 +87,35 @@ func main() {
 	}
 
 	selectComponent := huh.NewSelect[string]().
-		Title("Choose your k8s cluster").
+		Title(clusterSelectPrompt).
 		Options(selectOptions...).
 		Value(&selectedCluster)
 
-	form := huh.NewForm(
-		huh.NewGroup(
-			selectComponent,
-		),
-	)
+	group := huh.NewGroup(selectComponent)
+	form := huh.NewForm(group)
 
 	err = form.Run()
 	if err != nil {
-		slog.Error("Failed to run the CLI form")
+		slog.Error(cliFormError)
 		os.Exit(1)
 	}
 
-	if selectedCluster == "" {
-		slog.Warn("Invalid cluster selection")
+	if len(selectedCluster) == 0 {
+		slog.Warn(invalidClusterError)
 	}
 
-	clusterLoginCmd := exec.Command("tsh", "kube", "login", selectedCluster)
-	clusterLoginOut, err := clusterLoginCmd.Output()
+	kubeLoginCmd := exec.Command(
+		tshCommand,
+		kubeCommand,
+		loginCommand,
+		selectedCluster,
+	)
+	kubeLoginOut, err := kubeLoginCmd.Output()
 	if err != nil {
-		slog.Error("Failed to run the Teleport cluster login command")
+		slog.Error(kubeLoginError)
 		os.Exit(1)
 	}
 
-	fmt.Printf("%v\n", string(clusterLoginOut))
+	fmt.Printf("%v\n", string(kubeLoginOut))
 	os.Exit(0)
 }
