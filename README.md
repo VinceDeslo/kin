@@ -54,6 +54,16 @@ rm /usr/local/bin/kin
 
 > Make sure to clean up any alias values you set to invoke it.
 
+### Nix support
+
+This project will be migrating to using nix for ease of installation. You can build the derivation with:
+
+```
+nix develop
+nix build
+result/bin/kin
+```
+
 ### Notes
 
 Yes I should probably write an install script, go package or homebrew tap of some sorts. 
