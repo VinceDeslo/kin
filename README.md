@@ -54,17 +54,36 @@ rm /usr/local/bin/kin
 
 > Make sure to clean up any alias values you set to invoke it.
 
-### Nix support
+## Nix
 
-This project will be migrating to using nix for ease of installation. You can build the derivation with:
+This CLI and its dev environment is packaged as a Nix flake.
 
+### Accessing the dev shell
+
+```bash
+nix develop -c $SHELL
 ```
-nix develop
+
+### Building the CLI
+
+```bash
 nix build
-result/bin/kin
+result/bin/kin # run
 ```
 
-### Notes
+### Using it in other flakes
 
-Yes I should probably write an install script, go package or homebrew tap of some sorts. 
-Will I, maybe? Am I lazy though, definitely.
+```nix
+{
+	description = "My nifty flake";
+
+	inputs = {
+        ...<other inputs>...
+        kin.url = "github:VinceDeslo/kin";
+	};
+
+	outputs = {..., kin, ...}: {
+          kinCli = kin.packages.${system}.default;
+	};
+}
+```
