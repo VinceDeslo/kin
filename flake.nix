@@ -30,14 +30,8 @@
         packages.default = with pkgs;
           buildGoModule {
             pname = "kin";
-            version = "0.1.0";
+            version = "0.2.0";
             src = ./.;
-            # src = fetchFromGitHub {
-            #     owner = "VinceDeslo";
-            #     repo = "kin";
-            #     tag = "v${finalAttrs.version}";
-            #     hash = lib.fakeHash;
-            # };
             vendorHash = "sha256-aVk0ccByDS4+gs2im4eU6S5daK3OVoRYoBxn3SSgDGw=";
             meta = {
               description = "A pretty k8s cluster access prompt for Teleport";
