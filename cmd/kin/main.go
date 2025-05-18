@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -11,87 +12,63 @@ import (
 	"github.com/charmbracelet/huh"
 )
 
-var selectedCluster string
 const (
 	proxyFlag = "proxy"
 	proxyFlagUsage = "please provide a teleport proxy value"
 	clusterFlag = "cluster"
 	clusterFlagUsage = "please provide a teleport cluster value"
 
-	tshCommand = "tsh"
-	loginCommand = "login"
-	kubeCommand = "kube"
-	listCommand = "list"
-	abbreviatedListCommand = "ls"
-
-	proxyArg = "--proxy"
-	argSeparator = "="
-
 	clusterSelectPrompt = "Please choose your k8s cluster"
 
 	invalidFlagsError = "provided flags are invalid, command format should be: kin <proxy> <cluster>"
 	loginError = "failed to run the teleport login command"
 	kubeListError = "failed to run the teleport kube list command"
+	unmarshalError = "failed to unmarshal teleport cluster list"
 	kubeLoginError = "failed to run the teleport kube login command"
 	cliFormError = "failed to run the command line form"
 	invalidClusterError = "selected cluster is invalid"
-
-	clusterEntryDelimiter = " "
-	emptyString = ""
 )
+
+var selectedCluster string
+
+type Cluster struct {
+	Name string `json:"kube_cluster_name"`
+}
 
 func main() {
 	var proxy string
 	var cluster string
-	flag.StringVar(&proxy, proxyFlag, emptyString, proxyFlagUsage)
-	flag.StringVar(&cluster, clusterFlag, emptyString, clusterFlagUsage)
+	flag.StringVar(&proxy, proxyFlag, "", proxyFlagUsage)
+	flag.StringVar(&cluster, clusterFlag, "", clusterFlagUsage)
 	flag.Parse()
 
-	if proxy == emptyString || cluster == emptyString {
+	if proxy == "" || cluster == "" {
 		throwFatal(invalidFlagsError)
 	}
 
-	tshLoginCmd := exec.Command(
-		tshCommand,
-		loginCommand,
-		strings.Join([]string{proxyArg, proxy}, argSeparator),
-		cluster,
-	)
-
+	proxyArg := strings.Join([]string{"--proxy", proxy}, "=")
+	tshLoginCmd := exec.Command("tsh", "login", proxyArg, cluster)
 	loginOutput, err := tshLoginCmd.Output()
 	if err != nil {
 		throwFatal(loginError)
 	}
 	printCommandOutput(loginOutput)
 
-	kubeListCmd := exec.Command(
-		tshCommand,
-		kubeCommand,
-		abbreviatedListCommand,
-	)
+	kubeListCmd := exec.Command("tsh", "kube", "ls", "--format=json")
 	listOutput, err := kubeListCmd.Output()
 	if err != nil {
 		throwFatal(kubeListError)
 	}
 
-	lines := strings.Split(string(listOutput), "\n")
-
-	// Remove text headers
-	entries := lines[2:]
-	
-	// Extract available clusters
-	kubernetesClusters := []string{}
-	for _, entry := range entries {
-		clusterName := strings.Split(entry, clusterEntryDelimiter)[0]
-		if len(clusterName) > 0 {
-			kubernetesClusters = append(kubernetesClusters, clusterName)
-		}
+	var clusters []Cluster
+	err = json.Unmarshal(listOutput, &clusters)
+	if err != nil {
+		throwFatal(unmarshalError)
 	}
 
-	// Build user selection options
 	selectOptions := []huh.Option[string]{}
-	for _, cluster := range kubernetesClusters {
-		option := huh.NewOption(cluster, cluster)
+	for _, cluster := range clusters {
+		option := huh.NewOption(cluster.Name, cluster.Name)
 		selectOptions = append(selectOptions, option)
 	}
 
@@ -112,12 +89,7 @@ func main() {
 		throwFatal(invalidClusterError)
 	}
 
-	kubeLoginCmd := exec.Command(
-		tshCommand,
-		kubeCommand,
-		loginCommand,
-		selectedCluster,
-	)
+	kubeLoginCmd := exec.Command("tsh", "kube", "login", selectedCluster)
 	kubeLoginOut, err := kubeLoginCmd.Output()
 	if err != nil {
 		throwFatal(kubeLoginError)
